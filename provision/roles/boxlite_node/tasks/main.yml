@@ -1,0 +1,165 @@
+---
+- name: Validate explicit operator inputs before staging
+  ansible.builtin.assert:
+    that:
+      - boxlite_node_system in ['Linux', 'Darwin']
+      - boxlite_node_arch in ['amd64', 'arm64']
+      - boxlite_service_user is defined
+      - boxlite_service_group is defined
+      - boxlite_service_home is defined
+      - boxlite_artifacts is mapping
+      - "['nomad', 'boxlite', 'nomad-driver-boxlite', 'boxlite-stdio', 'envconsul', 'bao'] | difference(boxlite_artifacts.keys() | list) | length == 0"
+      - boxlite_operator_config is mapping
+      - boxlite_activation_config.enabled | bool
+      - boxlite_activation_config.auth_mode == 'openbao-hmac-v1'
+      - boxlite_nomad_client_config.client.reserved is defined
+      - boxlite_nomad_client_config.client.servers | length > 0
+      - boxlite_advertise_ip is match('^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)')
+      - boxlite_source_ip is match('^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)')
+    fail_msg: Explicit platform, private routes, existing identities, pinned artifacts and host reserved resources are required. No accounts or credentials are created.
+- name: Verify existing service account
+  ansible.builtin.command:
+    argv: [id, -u, "{{ boxlite_service_user }}"]
+  register: boxlite_service_identity
+  changed_when: false
+  check_mode: false
+- name: Record existing service identity
+  ansible.builtin.set_fact:
+    boxlite_service_uid: "{{ boxlite_service_identity.stdout | int }}"
+- name: Inspect pinned controller artifacts
+  ansible.builtin.stat:
+    path: "{{ item.value.src }}"
+    checksum_algorithm: sha256
+    follow: true
+  delegate_to: "{{ inventory_hostname if (item.value.remote_src | default(false) | bool) else 'localhost' }}"
+  become: "{{ item.value.remote_src | default(false) | bool }}"
+  loop: "{{ boxlite_artifacts | dict2items }}"
+  register: boxlite_artifact_stats
+- name: Require supplied artifact checksums and version/platform provenance
+  ansible.builtin.assert:
+    that:
+      - item.stat.isreg | default(false)
+      - item.stat.checksum == item.item.value.sha256
+      - item.item.value.version | length > 0
+      - item.item.value.os == {'Linux':'linux','Darwin':'darwin'}[boxlite_node_system]
+      - item.item.value.arch == boxlite_node_arch
+  loop: "{{ boxlite_artifact_stats.results }}"
+- name: Inspect adapter source and private reference assets for release identity
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    checksum_algorithm: sha256
+  delegate_to: localhost
+  become: false
+  loop: "{{ boxlite_release_inputs }}"
+  register: boxlite_release_stats
+  no_log: true
+- name: Require all release assets before mutation
+  ansible.builtin.assert:
+    that: item.stat.isreg | default(false)
+  loop: "{{ boxlite_release_stats.results }}"
+  no_log: true
+- name: Derive content-addressed release identity
+  ansible.builtin.set_fact:
+    boxlite_release_id: "{{ {'artifacts':boxlite_artifact_stats.results | map(attribute='stat.checksum') | list, 'sources':boxlite_release_stats.results | map(attribute='stat.checksum') | list, 'operator':boxlite_operator_config, 'activation':boxlite_activation_config, 'client':boxlite_nomad_client_config, 'root':boxlite_node_root, 'python':boxlite_python, 'advertise':boxlite_advertise_ip, 'source':boxlite_source_ip, 'namespace':boxlite_namespace, 'policy_path':boxlite_policy_path, 'policy_endpoint':boxlite_policy_endpoint, 'user':boxlite_service_user, 'group':boxlite_service_group, 'home':boxlite_service_home} | to_json | hash('sha256') }}"
+  no_log: true
+- name: Select immutable staged release
+  ansible.builtin.set_fact:
+    boxlite_release_dir: "{{ boxlite_node_root }}/releases/{{ boxlite_release_id }}"
+- name: Create protected release and durable state directories
+  ansible.builtin.file:
+    path: "{{ boxlite_node_root }}/{{ item }}"
+    state: directory
+    owner: "{{ boxlite_service_user }}"
+    group: "{{ boxlite_service_group }}"
+    mode: '0700'
+  loop:
+    - releases
+    - "releases/{{ boxlite_release_id }}/bin"
+    - "releases/{{ boxlite_release_id }}/plugins"
+    - "releases/{{ boxlite_release_id }}/companion/guest"
+    - "releases/{{ boxlite_release_id }}/config"
+    - "releases/{{ boxlite_release_id }}/services"
+    - driver-state
+    - sessions
+    - runtime
+    - logs
+    - rollback
+- name: Inspect selected release before check-mode remote copy
+  ansible.builtin.stat:
+    path: "{{ boxlite_release_dir }}/bin"
+  register: boxlite_release_bin
+- name: Report remote artifact staging for a new release in check-mode
+  ansible.builtin.debug:
+    msg: Verified existing target artifacts would be copied into the new release.
+  changed_when: true
+  when: ansible_check_mode and not boxlite_release_bin.stat.exists and (boxlite_artifacts | dict2items | selectattr('value.remote_src', 'defined') | list | length > 0)
+- name: Stage verified binary artifacts without executing them
+  ansible.builtin.copy:
+    src: "{{ item.value.src }}"
+    remote_src: "{{ item.value.remote_src | default(false) | bool }}"
+    dest: "{{ boxlite_release_dir }}/{{ 'plugins' if item.key == 'nomad-driver-boxlite' else 'bin' }}/{{ item.key }}"
+    owner: "{{ boxlite_service_user }}"
+    group: "{{ boxlite_service_group }}"
+    mode: '0700'
+  loop: "{{ boxlite_artifacts | dict2items }}"
+  when: not ansible_check_mode or not (item.value.remote_src | default(false) | bool) or boxlite_release_bin.stat.exists
+- name: Stage internal ACP adapter
+  ansible.builtin.copy:
+    src: "{{ boxlite_source_root }}/examples/prime/{{ item }}"
+    dest: "{{ boxlite_release_dir }}/companion/{{ item }}"
+    owner: "{{ boxlite_service_user }}"
+    group: "{{ boxlite_service_group }}"
+    mode: '0600'
+  loop: "{{ boxlite_companion_files }}"
+- name: Stage guest assets without executing worker code on controller
+  ansible.builtin.copy:
+    src: "{{ boxlite_source_root }}/examples/prime/guest/{{ item }}"
+    dest: "{{ boxlite_release_dir }}/companion/guest/{{ item }}"
+    owner: "{{ boxlite_service_user }}"
+    group: "{{ boxlite_service_group }}"
+    mode: '0600'
+  loop: "{{ boxlite_guest_files }}"
+- name: Stage existing secret references and private model policy only
+  ansible.builtin.copy:
+    src: "{{ boxlite_private_assets }}/{{ item.src }}"
+    dest: "{{ boxlite_release_dir }}/companion/{{ item.dest }}"
+    owner: "{{ boxlite_service_user }}"
+    group: "{{ boxlite_service_group }}"
+    mode: '0600'
+  no_log: true
+  loop: "{{ boxlite_private_files }}"
+- name: Stage internal runtime entrypoints
+  ansible.builtin.copy:
+    src: "{{ boxlite_source_root }}/scripts/{{ item }}"
+    dest: "{{ boxlite_release_dir }}/bin/{{ item }}"
+    owner: "{{ boxlite_service_user }}"
+    group: "{{ boxlite_service_group }}"
+    mode: '0700'
+  loop: [serve.py, read-rest-key.py, cleanup-stopped.py]
+- name: Stage trusted path resolver beside runtime entrypoints
+  ansible.builtin.copy:
+    src: "{{ boxlite_source_root }}/examples/prime/node_paths.py"
+    dest: "{{ boxlite_release_dir }}/bin/node_paths.py"
+    owner: "{{ boxlite_service_user }}"
+    group: "{{ boxlite_service_group }}"
+    mode: '0600'
+- name: Render desired operator/client configuration without activation
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "{{ boxlite_release_dir }}/config/{{ item }}"
+    owner: "{{ boxlite_service_user }}"
+    group: "{{ boxlite_service_group }}"
+    mode: '0600'
+  no_log: true
+  loop: [node.json, operator.json, client.json]
+- name: Render platform service definitions in staging only
+  ansible.builtin.template:
+    src: "{{ boxlite_node_system | lower }}-{{ item }}.j2"
+    dest: "{{ boxlite_release_dir }}/services/{{ item }}.{{ 'service' if boxlite_node_system == 'Linux' else 'plist' }}"
+    owner: "{{ boxlite_service_user }}"
+    group: "{{ boxlite_service_group }}"
+    mode: '0600'
+  loop: [nomad-client, boxlite-rest]
+- name: Explicit activation is separate from check-mode/staging
+  ansible.builtin.include_tasks: activate.yml
+  when: boxlite_node_activate | bool and not ansible_check_mode

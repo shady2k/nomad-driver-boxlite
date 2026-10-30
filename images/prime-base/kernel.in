@@ -1,0 +1,16 @@
+# Base kernel utilities, independent of project dependencies.
+dill==0.4.1
+httpx==0.28.1
+hatchling==1.27.0
+pytest==8.3.5
+requests
+pyyaml
+tomli
+python-dotenv
+pandas
+numpy
+scipy
+beautifulsoup4
+lxml
+pydantic==2.14.1
+tyro==1.0.16

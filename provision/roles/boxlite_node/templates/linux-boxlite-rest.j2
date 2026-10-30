@@ -1,0 +1,19 @@
+[Unit]
+Description=Node-local BoxLite runtime REST
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=simple
+User={{ boxlite_service_user }}
+Group={{ boxlite_service_group }}
+WorkingDirectory={{ boxlite_node_root }}
+Environment="HOME={{ boxlite_service_home }}"
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart="{{ boxlite_python }}" -I "{{ boxlite_node_root }}/current/bin/serve.py"
+KillMode=process
+Restart=on-failure
+TimeoutStopSec=60
+UMask=0077
+LimitNOFILE=65536
+[Install]
+WantedBy=multi-user.target

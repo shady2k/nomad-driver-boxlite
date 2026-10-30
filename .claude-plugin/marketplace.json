@@ -1,0 +1,14 @@
+{
+  "name": "nomad-boxlite",
+  "owner": {
+    "name": "Nomad BoxLite maintainers"
+  },
+  "plugins": [
+    {
+      "name": "nomad-boxlite-prime",
+      "source": "./examples/prime/claude-plugin",
+      "version": "0.4.0",
+      "description": "Generic isolated Prime workers through Nomad and BoxLite"
+    }
+  ]
+}

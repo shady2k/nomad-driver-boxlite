@@ -1,0 +1,105 @@
+---
+# This role never drains a node or kills workloads to make an upgrade possible.
+# Existing agents must already be quiesced by the operator. Staging is independent.
+- name: Require an explicitly established empty maintenance window
+  ansible.builtin.assert:
+    that: boxlite_node_maintenance_confirmed | bool
+    fail_msg: Activation requires an operator-established empty node; stage releases while tasks are running.
+- name: Detect running agents, guests and reattach helpers immediately before activation
+  ansible.builtin.command:
+    argv: [pgrep, -f, '(^|/)nomad[[:space:]]+(agent|logmon|executor)([[:space:]]|$)|(^|/)boxlite-shim[^/[:space:]]*([[:space:]]|$)|(^|/)boxlite[[:space:]]+serve([[:space:]]|$)']
+  register: boxlite_live_processes
+  changed_when: false
+  failed_when: boxlite_live_processes.rc not in [0, 1]
+- name: Refuse to stop existing processes or risk active/recovering guests
+  ansible.builtin.assert:
+    that: boxlite_live_processes.rc == 1
+    fail_msg: Existing Nomad/BoxLite processes must be safely quiesced before activation. This role does not stop VMs, agents, or change eligibility.
+- name: Reject unresolved driver ownership before activation
+  ansible.builtin.find:
+    paths: "{{ boxlite_node_root }}/driver-state"
+    patterns: '*.json'
+    recurse: false
+  register: boxlite_state_files
+- name: Require explicit reconciliation of pre-existing driver state
+  ansible.builtin.assert:
+    that: boxlite_state_files.matched == 0 or boxlite_reconciled_state_confirmed | default(false) | bool
+    fail_msg: Operator must verify existing task records terminal, native VMs stopped and no recovery pending. No state is deleted.
+- name: Select staged release in the empty maintenance window
+  ansible.builtin.file:
+    src: "{{ boxlite_release_dir }}"
+    dest: "{{ boxlite_node_root }}/current"
+    state: link
+    force: true
+    owner: "{{ boxlite_service_user }}"
+    group: "{{ boxlite_service_group }}"
+- name: Install regular protected operator configuration (NOFOLLOW-compatible)
+  ansible.builtin.copy:
+    src: "{{ boxlite_release_dir }}/config/{{ item }}"
+    dest: "{{ boxlite_node_root }}/{{ item }}"
+    remote_src: true
+    owner: "{{ boxlite_service_user }}"
+    group: "{{ boxlite_service_group }}"
+    mode: '0600'
+    backup: true
+  loop: [node.json, operator.json, client.json]
+- name: Install Linux unit files
+  ansible.builtin.copy:
+    src: "{{ boxlite_release_dir }}/services/{{ item }}.service"
+    dest: "/etc/systemd/system/{{ item }}.service"
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0644'
+    backup: true
+  loop: [boxlite-rest, nomad-client]
+  when: boxlite_node_system == 'Linux'
+- name: Validate installed Linux units before any start
+  ansible.builtin.command:
+    argv: [systemd-analyze, verify, /etc/systemd/system/boxlite-rest.service, /etc/systemd/system/nomad-client.service]
+  changed_when: false
+  when: boxlite_node_system == 'Linux'
+- name: Start Linux runtime and client through systemd
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+    daemon_reload: true
+  loop: [boxlite-rest, nomad-client]
+  when: boxlite_node_system == 'Linux'
+- name: Create existing-user macOS LaunchAgents directory
+  ansible.builtin.file:
+    path: "{{ boxlite_service_home }}/Library/LaunchAgents"
+    state: directory
+    owner: "{{ boxlite_service_user }}"
+    group: "{{ boxlite_service_group }}"
+    mode: '0700'
+  when: boxlite_node_system == 'Darwin'
+- name: Install macOS LaunchAgent files
+  ansible.builtin.copy:
+    src: "{{ boxlite_release_dir }}/services/{{ item.name }}.plist"
+    dest: "{{ boxlite_service_home }}/Library/LaunchAgents/{{ item.label }}.plist"
+    remote_src: true
+    owner: "{{ boxlite_service_user }}"
+    group: "{{ boxlite_service_group }}"
+    mode: '0600'
+    backup: true
+  loop:
+    - {name: boxlite-rest, label: local.boxlite.nomad-rest}
+    - {name: nomad-client, label: local.nomad.client}
+  when: boxlite_node_system == 'Darwin'
+- name: Require an existing logged-in macOS service-user launchd domain
+  ansible.builtin.command:
+    argv: [launchctl, print, "gui/{{ boxlite_service_uid }}"]
+  changed_when: false
+  when: boxlite_node_system == 'Darwin'
+- name: Load macOS runtime/client using existing launchd domain
+  ansible.builtin.command:
+    argv: [launchctl, bootstrap, "gui/{{ boxlite_service_uid }}", "{{ boxlite_service_home }}/Library/LaunchAgents/{{ item }}.plist"]
+  loop: [local.boxlite.nomad-rest, local.nomad.client]
+  when: boxlite_node_system == 'Darwin'
+- name: Wait for node-local Nomad API without assuming cluster Ready
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ boxlite_nomad_http_port }}"
+    timeout: 60

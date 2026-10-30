@@ -1,0 +1,10 @@
+{
+  "seed_mount": "secret",
+  "seed_path": "workers/dispatcher",
+  "bao_binary": "/absolute/path/to/bao",
+  "rest_key_mount": "secret",
+  "rest_key_path": "workers/local-api",
+  "outbound_allow_all": false,
+  "outbound_allow_net": [],
+  "rest_endpoint": "http://127.0.0.1:REPLACE_WITH_OPERATOR_PORT"
+}

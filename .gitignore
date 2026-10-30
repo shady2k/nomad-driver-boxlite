@@ -1,0 +1,12 @@
+/bin/
+/coverage.out
+*.test
+__pycache__/
+*.pyc
+*.before-*
+*.bak
+.DS_Store
+
+# Abandoned local runtime experiments; not project deliverables.
+/patches/boxlite/
+/images/linux-dev/build-guest-kernel.sh

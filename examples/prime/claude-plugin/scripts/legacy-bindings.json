@@ -1,0 +1,8 @@
+{
+  "profiles": {},
+  "ports": {
+    "min": 20000,
+    "max": 20010,
+    "host_network": "CONFIGURE_OPERATOR_NETWORK"
+  }
+}

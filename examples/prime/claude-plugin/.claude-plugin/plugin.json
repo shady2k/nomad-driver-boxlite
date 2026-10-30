@@ -1,0 +1,5 @@
+{
+  "name": "nomad-boxlite-prime",
+  "version": "0.4.0",
+  "description": "Generic isolated Prime workers through Nomad and BoxLite: explicit images/resources, workspace transfers, events, results and diagnostics."
+}

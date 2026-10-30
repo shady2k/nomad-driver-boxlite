@@ -1,0 +1,18 @@
+{
+  "profiles": {
+    "legacy-small": {
+      "parent": "legacy-worker"
+    },
+    "legacy-medium": {
+      "parent": "legacy-worker-medium"
+    },
+    "legacy-large": {
+      "parent": "legacy-worker-large"
+    }
+  },
+  "ports": {
+    "min": 20000,
+    "max": 20010,
+    "host_network": "worker-network"
+  }
+}

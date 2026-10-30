@@ -1,0 +1,19 @@
+[Unit]
+Description=Nomad client with native BoxLite driver
+After=network-online.target boxlite-rest.service
+Wants=network-online.target
+[Service]
+Type=simple
+User={{ boxlite_service_user }}
+Group={{ boxlite_service_group }}
+WorkingDirectory={{ boxlite_node_root }}
+Environment="HOME={{ boxlite_service_home }}"
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart="{{ boxlite_node_root }}/current/bin/nomad" agent "-config={{ boxlite_node_root }}/client.json"
+KillMode=process
+Restart=on-failure
+TimeoutStopSec=60
+UMask=0077
+LimitNOFILE=65536
+[Install]
+WantedBy=multi-user.target

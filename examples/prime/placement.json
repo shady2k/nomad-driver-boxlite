@@ -1,0 +1,4 @@
+{
+  "session_node_id": "0c450260-abf2-566a-45b4-59ad9c24bb24",
+  "reason": "Current pilot sessions have a node-local durable identity fence; do not migrate/recreate them on another compute host."
+}

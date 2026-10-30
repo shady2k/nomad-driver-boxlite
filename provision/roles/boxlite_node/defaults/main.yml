@@ -1,0 +1,48 @@
+---
+boxlite_node_activate: false
+boxlite_node_maintenance_confirmed: false
+boxlite_node_system: "{{ ansible_facts.system }}"
+boxlite_node_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64', 'arm64': 'arm64'}.get(ansible_facts.architecture, '') }}"
+boxlite_node_root: "{{ (boxlite_service_home ~ '/Library/Application Support/BoxLiteNomad') if boxlite_node_system == 'Darwin' else '/var/lib/boxlite-nomad' }}"
+boxlite_source_root: "{{ role_path }}/../../.."
+boxlite_python: /usr/bin/python3
+boxlite_nomad_http_port: 4646
+boxlite_namespace: boxlite-prime
+boxlite_policy_path: nomad/jobs
+boxlite_policy_endpoint: "http://127.0.0.1:{{ boxlite_nomad_http_port }}"
+boxlite_companion_files:
+  - companion.py
+  - acp_bridge.py
+  - node_paths.py
+  - profiles.py
+  - contract.py
+  - universal.py
+  - dispatcher_auth.py
+  - channel.py
+  - gateway.py
+  - events.py
+  - secure_logs.py
+  - observability.py
+  - model_policy.py
+  - exchange.py
+  - exchange_bridge.py
+  - multipart.py
+boxlite_guest_files:
+  - bootstrap.py
+  - guest.py
+  - server.mjs
+  - session.mjs
+  - artifacts.py
+  - provision.sh
+  - package.json
+  - package-lock.json
+  - uv.lock
+  - settings.json
+boxlite_private_files:
+  - { src: envconsul.hcl, dest: envconsul.hcl }
+  - { src: legacy-bindings.json, dest: legacy-bindings.json }
+  - { src: models.json, dest: guest/models.json }
+  - { src: session-policy.json, dest: guest/session-policy.json }
+
+# Content-addressed releases include code, templates and private reference files.
+boxlite_release_inputs: "{{ boxlite_companion_files | map('regex_replace', '^(.*)$', boxlite_source_root ~ '/examples/prime/\\1') | list + boxlite_guest_files | map('regex_replace', '^(.*)$', boxlite_source_root ~ '/examples/prime/guest/\\1') | list + ['serve.py','read-rest-key.py','cleanup-stopped.py'] | map('regex_replace', '^(.*)$', boxlite_source_root ~ '/scripts/\\1') | list + boxlite_private_files | map(attribute='src') | map('regex_replace', '^(.*)$', boxlite_private_assets ~ '/\\1') | list + ['node.json','operator.json','client.json','linux-nomad-client','linux-boxlite-rest','darwin-nomad-client','darwin-boxlite-rest'] | map('regex_replace', '^(.*)$', role_path ~ '/templates/\\1.j2') | list }}"

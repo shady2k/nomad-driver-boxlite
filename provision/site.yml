@@ -1,0 +1,6 @@
+---
+- name: Stage native BoxLite Nomad clients
+  hosts: boxlite_nodes
+  gather_facts: true
+  roles:
+    - boxlite_node

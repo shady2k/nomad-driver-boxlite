@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>local.boxlite.nomad-rest</string>
+<key>ProgramArguments</key><array><string>{{ boxlite_python | e }}</string><string>-I</string><string>{{ boxlite_node_root | e }}/current/bin/serve.py</string></array>
+<key>RunAtLoad</key><true/><key>AbandonProcessGroup</key><true/>
+<key>StandardOutPath</key><string>{{ boxlite_node_root | e }}/logs/serve.stdout.log</string>
+<key>StandardErrorPath</key><string>{{ boxlite_node_root | e }}/logs/serve.stderr.log</string>
+<key>EnvironmentVariables</key><dict><key>HOME</key><string>{{ boxlite_service_home | e }}</string><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
+</dict></plist>

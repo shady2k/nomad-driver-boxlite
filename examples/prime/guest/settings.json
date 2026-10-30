@@ -1,0 +1,29 @@
+{
+  "retry": {
+    "enabled": false,
+    "maxRetries": 0,
+    "failover": {
+      "enabled": false,
+      "maxRetries": 0
+    },
+    "provider": {
+      "timeoutMs": 60000
+    }
+  },
+  "telemetry": {
+    "enabled": false
+  },
+  "harnessRefinements": false,
+  "compaction": {
+    "enabled": true
+  },
+  "autoRefine": {
+    "enabled": false
+  },
+  "agentTraces": {
+    "enabled": false
+  },
+  "bundledSkills": {
+    "websearch": false
+  }
+}

@@ -1,0 +1,10 @@
+{% set driver = {'endpoint':boxlite_operator_config.rest_endpoint, 'state_dir':boxlite_node_root ~ '/driver-state', 'api_key_command':[boxlite_python,'-I',boxlite_node_root ~ '/current/bin/read-rest-key.py'], 'policy_endpoint':boxlite_policy_endpoint, 'policy_namespace':boxlite_namespace, 'policy_path':boxlite_policy_path, 'start_timeout':'15m', 'outbound_allow_all':boxlite_operator_config.outbound_allow_all, 'outbound_allow_net':boxlite_operator_config.outbound_allow_net, 'allow_external_stdio':true, 'companion_command':[boxlite_python,'-I',boxlite_node_root ~ '/current/companion/companion.py'], 'guest_bootstrap_file':boxlite_node_root ~ '/current/companion/guest/bootstrap.py'} %}
+{% set plugins = [] %}
+{% for entry in boxlite_nomad_client_config.plugin | default([]) %}
+{% if 'nomad-driver-boxlite' not in entry and 'boxlite' not in entry %}{% set _ = plugins.append(entry) %}{% endif %}
+{% endfor %}
+{% set _ = plugins.append({'nomad-driver-boxlite':[{'config':[driver]}]}) %}
+{% set options = boxlite_nomad_client_config.client.options | default({}) %}
+{% set allowlist = (options.get('driver.allowlist', '')).split(',') | reject('equalto','') | list %}
+{% if 'boxlite' not in allowlist %}{% set _ = allowlist.append('boxlite') %}{% endif %}
+{{ boxlite_nomad_client_config | combine({'client':{'options':options | combine({'driver.allowlist':allowlist | join(',')})},'plugin_dir':boxlite_node_root ~ '/current/plugins','plugin':plugins,'telemetry':{'publish_allocation_metrics':true},'addresses':{'http':'127.0.0.1'}}, recursive=true) | to_nice_json }}
